@@ -122,7 +122,8 @@ func (b *bar) audio() string {
 	for _, line := range strings.Split(string(content), "\n") {
 		if strings.Contains(line, `* index: `) {
 			match = true
-			continue
+		} else if strings.Contains(line, " index: ") {
+			match = false
 		}
 		if match && strings.Contains(line, "volume: ") {
 			front := strings.Split(line, "/")
@@ -223,7 +224,8 @@ func (b *bar) microphone() string {
 	for _, line := range strings.Split(string(content), "\n") {
 		if strings.Contains(line, `* index: `) {
 			match = true
-			continue
+		} else if strings.Contains(line, " index: ") {
+			match = true
 		}
 		if match && strings.Contains(line, "muted: no") {
 			statusMsg = "mic: on"
@@ -291,14 +293,15 @@ func main() {
 	intervalFlag := flag.Int("interval", 1, "seconds to wait between updates")
 	oneShotFlag := flag.Bool("oneshot", false, "executes the program once and terminates")
 	outputFlag := flag.Bool("output", false, "prints the output to stdout")
+	rootWindowFlag := flag.Bool("rootwindow", true, "updates the root window's name")
 	flag.Bool("audio", true, "shows the main volume percentage")
 	flag.Bool("camera", true, "shows if the camera is on/off")
 	flag.Bool("date", true, "shows the current date")
 	flag.Bool("dateseconds", true, "shows the current seconds in date")
+	flag.Bool("ignoreos", false, "does not check for the OS prerequisites (also it ignores some flags)")
 	flag.Bool("keyboard", true, "shows the keyboard layout")
 	flag.Bool("loadavg", true, "shows the system load average")
 	flag.Bool("microphone", true, "shows if the microphone is on/off")
-	flag.Bool("ignoreos", false, "does not check for the OS prerequisites (also it ignores some flags)")
 	flag.Parse()
 	if errCo := checkOut(); errCo != nil {
 		log.Fatal(errCo)
@@ -306,7 +309,9 @@ func main() {
 	b := bar{display: dsp}
 	for {
 		output = b.status()
-		b.xsetroot(output)
+		if *rootWindowFlag {
+			b.xsetroot(output)
+		}
 		if *outputFlag {
 			fmt.Println(output)
 		}
