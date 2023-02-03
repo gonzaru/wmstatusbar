@@ -41,16 +41,8 @@ func checkOS() bool {
 	return status
 }
 
-// checkOut checks for a valid prerequisites
-func checkOut() error {
-	if flag.Lookup("ignoreos").Value.String() == "true" {
-		if errDf := disableFlagsOS(); errDf != nil {
-			return errDf
-		}
-	}
-	if !checkOS() {
-		return fmt.Errorf("error: '%s' has not been tested, try -ignoreos=true\n", runtime.GOOS)
-	}
+// checkFlags checks for a valid flags prerequisites
+func checkFlags() error {
 	if flag.Lookup("audio").Value.String() == "true" || flag.Lookup("microphone").Value.String() == "true" {
 		cmds := []string{"pactl", "pacmd"}
 		for _, cmd := range cmds {
@@ -73,6 +65,22 @@ func checkOut() error {
 		if _, err := os.Stat("/proc/modules"); errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("error: file '%s' does not exists, try -camera=false\n", "/proc/modules")
 		}
+	}
+	return nil
+}
+
+// checkOut checks for a valid prerequisites
+func checkOut() error {
+	if flag.Lookup("ignoreos").Value.String() == "true" {
+		if errDf := disableFlagsOS(); errDf != nil {
+			return errDf
+		}
+	}
+	if !checkOS() {
+		return fmt.Errorf("error: '%s' has not been tested, try -ignoreos=true\n", runtime.GOOS)
+	}
+	if errCf := checkFlags(); errCf != nil {
+		return errCf
 	}
 	return nil
 }
