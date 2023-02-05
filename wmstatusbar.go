@@ -16,16 +16,36 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/user"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
 // bar data type
 type bar struct {
-	display *C.Display
+	display  *C.Display
+	tmpDir   string
+	userName string
+}
+
+// errPrintf prints the error message to stderr according to a format specifier
+func errPrintf(format string, v ...interface{}) {
+	if _, err := fmt.Fprintf(os.Stderr, format, v...); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// getUserName returns the current user name
+func getUserName() string {
+	usc, err := user.Current()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return usc.Username
 }
 
 // checkOS checks if the current operating system has been tested
@@ -94,13 +114,6 @@ func disableFlagsOS() error {
 		}
 	}
 	return nil
-}
-
-// errPrintf prints the error message to stderr according to a format specifier
-func errPrintf(format string, v ...interface{}) {
-	if _, err := fmt.Fprintf(os.Stderr, format, v...); err != nil {
-		log.Fatal(err)
-	}
 }
 
 // audioIsMuted checks if the main audio is muted
@@ -186,6 +199,41 @@ func (b *bar) date() string {
 	return timeNow
 }
 
+// gorum prints gorum's media title
+func (b *bar) gorum() string {
+	var (
+		gorumPid   = fmt.Sprintf("%s/%s-%s.pid", b.tmpDir, b.userName, "gorum")
+		gorumTitle = fmt.Sprintf("%s/%s-%s-wm.txt", b.tmpDir, b.userName, "gorum")
+		title      string
+	)
+	if flag.Lookup("gorum").Value.String() == "false" {
+		return ""
+	}
+	if _, errOsPid := os.Stat(gorumPid); errors.Is(errOsPid, os.ErrNotExist) {
+		return ""
+	}
+	contentPid, errRfPid := ioutil.ReadFile(gorumPid)
+	if errRfPid != nil {
+		return ""
+	}
+	pid, errSa := strconv.Atoi(strings.TrimRight(string(contentPid), "\n"))
+	if errSa != nil {
+		return ""
+	}
+	if errSk := syscall.Kill(pid, syscall.Signal(0)); errSk != nil {
+		return ""
+	}
+	if _, errOsTitle := os.Stat(gorumTitle); errors.Is(errOsTitle, os.ErrNotExist) {
+		return ""
+	}
+	contentTitle, errRfTitle := ioutil.ReadFile(gorumTitle)
+	if errRfTitle != nil {
+		return ""
+	}
+	title = strings.TrimRight(string(contentTitle), "\n")
+	return title
+}
+
 // keyboard gets the current keyboard layout
 func (b *bar) keyboard() string {
 	var layout string
@@ -247,18 +295,20 @@ func (b *bar) microphone() string {
 func (b *bar) status() string {
 	// display the order from left(0) to right(N)
 	channelsMap := map[string]int{
-		"microphone": 0,
-		"camera":     1,
-		"audio":      2,
-		"loadavg":    3,
-		"keyboard":   4,
-		"date":       5,
+		"gorum":      0,
+		"microphone": 1,
+		"camera":     2,
+		"audio":      3,
+		"loadavg":    4,
+		"keyboard":   5,
+		"date":       6,
 	}
 	numChannels := len(channelsMap)
 	channels := make(map[int]chan string)
 	for i := 0; i < numChannels; i++ {
 		channels[i] = make(chan string)
 	}
+	go func() { channels[channelsMap["gorum"]] <- b.gorum() }()
 	go func() { channels[channelsMap["microphone"]] <- b.microphone() }()
 	go func() { channels[channelsMap["camera"]] <- b.camera() }()
 	go func() { channels[channelsMap["audio"]] <- b.audio() }()
@@ -307,6 +357,7 @@ func main() {
 	flag.Bool("date", true, "shows the current date")
 	flag.Bool("dateseconds", true, "shows the current seconds in date")
 	flag.Bool("ignoreos", false, "does not check for the OS prerequisites (also it ignores some flags)")
+	flag.Bool("gorum", false, "prints gorum's media title")
 	flag.Bool("keyboard", true, "shows the keyboard layout")
 	flag.Bool("loadavg", true, "shows the system load average")
 	flag.Bool("microphone", true, "shows if the microphone is on/off")
@@ -314,7 +365,11 @@ func main() {
 	if errCo := checkOut(); errCo != nil {
 		log.Fatal(errCo)
 	}
-	b := bar{display: dsp}
+	b := bar{
+		display:  dsp,
+		tmpDir:   os.TempDir(),
+		userName: getUserName(),
+	}
 	for {
 		output = b.status()
 		if *rootWindowFlag {
