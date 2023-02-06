@@ -1,6 +1,7 @@
 // by Gonzaru
 // Distributed under the terms of the GNU General Public License v3
 
+// Package main implements the status bar
 package main
 
 // #cgo LDFLAGS: -lX11
@@ -12,7 +13,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -67,23 +67,23 @@ func checkFlags() error {
 		cmds := []string{"pactl", "pacmd"}
 		for _, cmd := range cmds {
 			if _, errLp := exec.LookPath(cmd); errLp != nil {
-				return fmt.Errorf("error: command '%s' not found, try -audio=false -microphone=false\n", cmd)
+				return fmt.Errorf("error: command '%s' not found, try -audio=false -microphone=false", cmd)
 			}
 		}
 	}
 	if flag.Lookup("keyboard").Value.String() == "true" {
 		if _, errLp := exec.LookPath("setxkbmap"); errLp != nil {
-			return fmt.Errorf("error: command '%s' not found, try -keyboard=false\n", "setxkbmap")
+			return fmt.Errorf("error: command '%s' not found, try -keyboard=false", "setxkbmap")
 		}
 	}
 	if flag.Lookup("loadavg").Value.String() == "true" {
 		if _, err := os.Stat("/proc/loadavg"); errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("error: file '%s' does not exists, try -loadavg=false\n", "/proc/loadavg")
+			return fmt.Errorf("error: file '%s' does not exists, try -loadavg=false", "/proc/loadavg")
 		}
 	}
 	if flag.Lookup("camera").Value.String() == "true" {
 		if _, err := os.Stat("/proc/modules"); errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("error: file '%s' does not exists, try -camera=false\n", "/proc/modules")
+			return fmt.Errorf("error: file '%s' does not exists, try -camera=false", "/proc/modules")
 		}
 	}
 	return nil
@@ -97,7 +97,7 @@ func checkOut() error {
 		}
 	}
 	if !checkOS() {
-		return fmt.Errorf("error: '%s' has not been tested, try -ignoreos=true\n", runtime.GOOS)
+		return fmt.Errorf("error: '%s' has not been tested, try -ignoreos=true", runtime.GOOS)
 	}
 	if errCf := checkFlags(); errCf != nil {
 		return errCf
@@ -168,7 +168,7 @@ func (b *bar) camera() string {
 	if flag.Lookup("camera").Value.String() == "false" {
 		return ""
 	}
-	content, errRf := ioutil.ReadFile("/proc/modules")
+	content, errRf := os.ReadFile("/proc/modules")
 	if errRf != nil {
 		errPrintf(errRf.Error())
 	}
@@ -191,7 +191,7 @@ func (b *bar) date() string {
 	if flag.Lookup("date").Value.String() == "false" {
 		return ""
 	}
-	if flag.Lookup("dateseconds").Value.String() == "false" {
+	if flag.Lookup("date-seconds").Value.String() == "false" {
 		timeNow = time.Now().Format("Mon Jan 2 15:04")
 	} else {
 		timeNow = time.Now().Format("Mon Jan 2 15:04:05")
@@ -212,7 +212,7 @@ func (b *bar) gorum() string {
 	if _, errOsPid := os.Stat(gorumPid); errors.Is(errOsPid, os.ErrNotExist) {
 		return ""
 	}
-	contentPid, errRfPid := ioutil.ReadFile(gorumPid)
+	contentPid, errRfPid := os.ReadFile(gorumPid)
 	if errRfPid != nil {
 		return ""
 	}
@@ -226,7 +226,7 @@ func (b *bar) gorum() string {
 	if _, errOsTitle := os.Stat(gorumTitle); errors.Is(errOsTitle, os.ErrNotExist) {
 		return ""
 	}
-	contentTitle, errRfTitle := ioutil.ReadFile(gorumTitle)
+	contentTitle, errRfTitle := os.ReadFile(gorumTitle)
 	if errRfTitle != nil {
 		return ""
 	}
@@ -236,7 +236,10 @@ func (b *bar) gorum() string {
 
 // keyboard gets the current keyboard layout
 func (b *bar) keyboard() string {
-	var layout string
+	var (
+		layout  string
+		variant string
+	)
 	if flag.Lookup("keyboard").Value.String() == "false" {
 		return ""
 	}
@@ -244,11 +247,17 @@ func (b *bar) keyboard() string {
 	if err != nil {
 		errPrintf(err.Error())
 	}
-	re := regexp.MustCompile(`(?m)^layout:\s+([a-z][a-z])$`)
-	if match := re.FindSubmatch(content); len(match) >= 2 {
-		layout = string(bytes.ToUpper(bytes.TrimSpace(match[1])))
+	reLayout := regexp.MustCompile(`(?m)^layout:\s+([a-z][a-z])$`)
+	if matchLayout := reLayout.FindSubmatch(content); len(matchLayout) >= 2 {
+		layout = string(bytes.ToUpper(bytes.TrimSpace(matchLayout[1])))
 	}
-	return layout
+	if flag.Lookup("keyboard-variant").Value.String() == "true" {
+		reVariant := regexp.MustCompile(`(?m)^variant:\s+(\w+)$`)
+		if matchVariant := reVariant.FindSubmatch(content); len(matchVariant) >= 2 {
+			variant = " " + string(bytes.TrimSpace(matchVariant[1]))
+		}
+	}
+	return layout + variant
 }
 
 // loadavg gets the average system load
@@ -257,7 +266,7 @@ func (b *bar) loadavg() string {
 	if flag.Lookup("loadavg").Value.String() == "false" {
 		return ""
 	}
-	content, err := ioutil.ReadFile("/proc/loadavg")
+	content, err := os.ReadFile("/proc/loadavg")
 	if err != nil {
 		errPrintf(err.Error())
 	}
@@ -355,10 +364,11 @@ func main() {
 	flag.Bool("audio", true, "shows the main volume percentage")
 	flag.Bool("camera", true, "shows if the camera is on/off")
 	flag.Bool("date", true, "shows the current date")
-	flag.Bool("dateseconds", true, "shows the current seconds in date")
+	flag.Bool("date-seconds", true, "shows the current seconds in date")
 	flag.Bool("ignoreos", false, "does not check for the OS prerequisites (also it ignores some flags)")
 	flag.Bool("gorum", false, "prints gorum's media title")
 	flag.Bool("keyboard", true, "shows the keyboard layout")
+	flag.Bool("keyboard-variant", true, "shows the keyboard layout variant")
 	flag.Bool("loadavg", true, "shows the system load average")
 	flag.Bool("microphone", true, "shows if the microphone is on/off")
 	flag.Parse()
