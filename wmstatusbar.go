@@ -63,12 +63,9 @@ func checkOS() bool {
 
 // checkFlags checks for a valid flags prerequisites
 func checkFlags() error {
-	if flag.Lookup("audio").Value.String() == "true" || flag.Lookup("microphone").Value.String() == "true" {
-		cmds := []string{"pactl", "pacmd"}
-		for _, cmd := range cmds {
-			if _, errLp := exec.LookPath(cmd); errLp != nil {
-				return fmt.Errorf("error: command '%s' not found, try -audio=false -microphone=false", cmd)
-			}
+	if flag.Lookup("audio").Value.String() == "true" {
+		if _, errLp := exec.LookPath("pactl"); errLp != nil {
+			return fmt.Errorf("error: command '%s' not found, try -audio=false", "pactl")
 		}
 	}
 	if flag.Lookup("keyboard").Value.String() == "true" {
@@ -107,7 +104,7 @@ func checkOut() error {
 
 // disableFlagsOS disables some OS dependent flags
 func disableFlagsOS() error {
-	flags := []string{"audio", "microphone", "keyboard", "loadavg", "camera"}
+	flags := []string{"audio", "keyboard", "loadavg", "camera"}
 	for _, value := range flags {
 		if errFs := flag.Lookup(value).Value.Set("false"); errFs != nil {
 			return errFs
@@ -119,7 +116,7 @@ func disableFlagsOS() error {
 // audioIsMuted checks if the main audio is muted
 func (b *bar) audioIsMuted() bool {
 	status := false
-	content, errEc := exec.Command("pactl", "list", "sinks").Output()
+	content, errEc := exec.Command("pactl", "get-sink-mute", "@DEFAULT_SINK@").Output()
 	if errEc != nil {
 		errPrintf(errEc.Error())
 	}
@@ -135,25 +132,17 @@ func (b *bar) audio() string {
 	if flag.Lookup("audio").Value.String() == "false" {
 		return ""
 	}
-	content, errEc := exec.Command("pacmd", "list-sinks").Output()
+	content, errEc := exec.Command("pactl", "get-sink-volume", "@DEFAULT_SINK@").Output()
 	if errEc != nil {
 		return errEc.Error()
 	}
-	match := false
-	for _, line := range strings.Split(string(content), "\n") {
-		if strings.Contains(line, `* index: `) {
-			match = true
-		} else if strings.Contains(line, " index: ") {
-			match = false
-		}
-		if match && strings.Contains(line, "volume: ") {
-			front := strings.Split(line, "/")
-			frontLeft := strings.TrimSpace(front[1])
-			frontRight := strings.TrimSpace(front[3])
-			if frontLeft != "" && frontLeft == frontRight {
-				statusMsg = "vol: " + frontLeft
-			}
-			break
+	line := string(content)
+	if strings.Contains(line, "Volume: ") {
+		front := strings.Split(line, "/")
+		frontLeft := strings.TrimSpace(front[1])
+		frontRight := strings.TrimSpace(front[3])
+		if frontLeft != "" && frontLeft == frontRight {
+			statusMsg = "vol: " + frontLeft
 		}
 	}
 	if b.audioIsMuted() {
@@ -236,10 +225,7 @@ func (b *bar) gorum() string {
 
 // keyboard gets the current keyboard layout
 func (b *bar) keyboard() string {
-	var (
-		layout  string
-		variant string
-	)
+	var layout, variant string
 	if flag.Lookup("keyboard").Value.String() == "false" {
 		return ""
 	}
@@ -275,42 +261,16 @@ func (b *bar) loadavg() string {
 	return statusMsg
 }
 
-// microphone tells if the default microphone is active or not
-func (b *bar) microphone() string {
-	var statusMsg = "mic: off"
-	if flag.Lookup("microphone").Value.String() == "false" {
-		return ""
-	}
-	content, err := exec.Command("pacmd", "list-sources").Output()
-	if err != nil {
-		errPrintf(err.Error())
-	}
-	match := false
-	for _, line := range strings.Split(string(content), "\n") {
-		if strings.Contains(line, `* index: `) {
-			match = true
-		} else if strings.Contains(line, " index: ") {
-			match = true
-		}
-		if match && strings.Contains(line, "muted: no") {
-			statusMsg = "mic: on"
-			break
-		}
-	}
-	return statusMsg
-}
-
 // status gets the status bar
 func (b *bar) status() string {
 	// display the order from left(0) to right(N)
 	channelsMap := map[string]int{
-		"gorum":      0,
-		"microphone": 1,
-		"camera":     2,
-		"audio":      3,
-		"loadavg":    4,
-		"keyboard":   5,
-		"date":       6,
+		"gorum":    0,
+		"camera":   1,
+		"audio":    2,
+		"loadavg":  3,
+		"keyboard": 4,
+		"date":     5,
 	}
 	numChannels := len(channelsMap)
 	channels := make(map[int]chan string)
@@ -318,7 +278,6 @@ func (b *bar) status() string {
 		channels[i] = make(chan string)
 	}
 	go func() { channels[channelsMap["gorum"]] <- b.gorum() }()
-	go func() { channels[channelsMap["microphone"]] <- b.microphone() }()
 	go func() { channels[channelsMap["camera"]] <- b.camera() }()
 	go func() { channels[channelsMap["audio"]] <- b.audio() }()
 	go func() { channels[channelsMap["loadavg"]] <- b.loadavg() }()
@@ -370,7 +329,6 @@ func main() {
 	flag.Bool("keyboard", true, "shows the keyboard layout")
 	flag.Bool("keyboard-variant", true, "shows the keyboard layout variant")
 	flag.Bool("loadavg", true, "shows the system load average")
-	flag.Bool("microphone", true, "shows if the microphone is on/off")
 	flag.Parse()
 	if errCo := checkOut(); errCo != nil {
 		log.Fatal(errCo)
