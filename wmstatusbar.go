@@ -13,7 +13,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -141,6 +143,7 @@ func (b *bar) audio() string {
 		front := strings.Split(line, "/")
 		frontLeft := strings.TrimSpace(front[1])
 		frontRight := strings.TrimSpace(front[3])
+		statusMsg = "vol: left: " + frontLeft + " right: " + frontRight
 		if frontLeft != "" && frontLeft == frontRight {
 			statusMsg = "vol: " + frontLeft
 		}
@@ -180,11 +183,8 @@ func (b *bar) date() string {
 	if flag.Lookup("date").Value.String() == "false" {
 		return ""
 	}
-	if flag.Lookup("date-seconds").Value.String() == "false" {
-		timeNow = time.Now().Format("Mon Jan 2 15:04")
-	} else {
-		timeNow = time.Now().Format("Mon Jan 2 15:04:05")
-	}
+	dateFormat := flag.Lookup("date-format").Value.String()
+	timeNow = time.Now().Format(dateFormat)
 	return timeNow
 }
 
@@ -270,7 +270,8 @@ func (b *bar) status() string {
 		"audio":    2,
 		"loadavg":  3,
 		"keyboard": 4,
-		"date":     5,
+		"weather":  5,
+		"date":     6,
 	}
 	numChannels := len(channelsMap)
 	channels := make(map[int]chan string)
@@ -282,6 +283,7 @@ func (b *bar) status() string {
 	go func() { channels[channelsMap["audio"]] <- b.audio() }()
 	go func() { channels[channelsMap["loadavg"]] <- b.loadavg() }()
 	go func() { channels[channelsMap["keyboard"]] <- b.keyboard() }()
+	go func() { channels[channelsMap["weather"]] <- b.weather() }()
 	go func() { channels[channelsMap["date"]] <- b.date() }()
 	messages := make([]string, numChannels)
 	for i := 0; i < numChannels; i++ {
@@ -303,6 +305,31 @@ func (b *bar) status() string {
 	return statusLine
 }
 
+// weather gets the city weather
+func (b *bar) weather() string {
+	var statusMsg string
+	city := flag.Lookup("weather").Value.String()
+	if city == "" {
+		return ""
+	}
+	weatherFormat := flag.Lookup("weather-format").Value.String()
+	link := "https://wttr.in/" + city + "?format=" + weatherFormat
+	res, errHg := http.Get(link)
+	if errHg != nil {
+		errPrintf(errHg.Error())
+	}
+	content, errRa := io.ReadAll(res.Body)
+	if errBc := res.Body.Close(); errRa != nil {
+		errPrintf(errBc.Error())
+	}
+	contentStr := string(content)
+	statusMsg = contentStr
+	if strings.Contains(contentStr, "°C") {
+		statusMsg = strings.Replace(contentStr, "°C", "", -1) + " °C"
+	}
+	return statusMsg
+}
+
 // xsetroot sets X root window
 func (b *bar) xsetroot(status string) {
 	C.XStoreName(b.display, C.XDefaultRootWindow(b.display), C.CString(status))
@@ -320,15 +347,17 @@ func main() {
 	oneShotFlag := flag.Bool("oneshot", false, "executes the program once and terminates")
 	outputFlag := flag.Bool("output", false, "prints the output to stdout")
 	rootWindowFlag := flag.Bool("rootwindow", true, "updates the root window's name")
-	flag.Bool("audio", true, "shows the main volume percentage")
-	flag.Bool("camera", true, "shows if the camera is on/off")
+	flag.Bool("audio", false, "shows the main volume percentage")
+	flag.Bool("camera", false, "shows if the camera is on/off")
 	flag.Bool("date", true, "shows the current date")
-	flag.Bool("date-seconds", true, "shows the current seconds in date")
+	flag.String("date-format", "Mon Jan 2 15:04:05", "shows the current date with a custom format")
 	flag.Bool("ignoreos", false, "does not check for the OS prerequisites (also it ignores some flags)")
 	flag.Bool("gorum", false, "prints gorum's media title")
-	flag.Bool("keyboard", true, "shows the keyboard layout")
-	flag.Bool("keyboard-variant", true, "shows the keyboard layout variant")
-	flag.Bool("loadavg", true, "shows the system load average")
+	flag.Bool("keyboard", false, "shows the current keyboard layout")
+	flag.Bool("keyboard-variant", false, "shows the current keyboard layout variant")
+	flag.Bool("loadavg", false, "shows the system load average")
+	flag.String("weather", "", "shows the city weather")
+	flag.String("weather-format", "%t(%f)", "shows the city weather with a custom format (wttr.in)")
 	flag.Parse()
 	if errCo := checkOut(); errCo != nil {
 		log.Fatal(errCo)
