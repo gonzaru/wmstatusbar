@@ -27,6 +27,17 @@ import (
 	"time"
 )
 
+// validFeatures allowed features
+var validFeatures = []string{
+	"audio",
+	"camera",
+	"date",
+	"gorum",
+	"keyboard",
+	"loadavg",
+	"weather",
+}
+
 // bar data type
 type bar struct {
 	display  *C.Display
@@ -63,27 +74,57 @@ func checkOS() bool {
 	return status
 }
 
+// checkFeatures checks for a valid flag features
+func checkFeatures() error {
+	curFeatures := strings.Split(flag.Lookup("features").Value.String(), ",")
+	for _, curFeature := range curFeatures {
+		if curFeature == "" {
+			return fmt.Errorf("error: feature '%s' cannot be empy", curFeature)
+		}
+		if strings.Contains(curFeature, " ") {
+			return fmt.Errorf("error: feature '%s' cannot contain spaces", curFeature)
+		}
+		match := false
+		for _, validFeature := range validFeatures {
+			if validFeature == curFeature {
+				match = true
+				break
+			}
+		}
+		if !match {
+			return fmt.Errorf("error: feature '%s' is not a valid feature", curFeature)
+		}
+	}
+	return nil
+}
+
 // checkFlags checks for a valid flags prerequisites
 func checkFlags() error {
-	if flag.Lookup("audio").Value.String() == "true" {
+	if errCf := checkFeatures(); errCf != nil {
+		return errCf
+	}
+	if featureExists("audio") {
 		if _, errLp := exec.LookPath("pactl"); errLp != nil {
-			return fmt.Errorf("error: command '%s' not found, try -audio=false", "pactl")
+			return fmt.Errorf("error: command '%s' not found, try it without the audio feature", "pactl")
 		}
 	}
-	if flag.Lookup("keyboard").Value.String() == "true" {
+	if featureExists("keyboard") {
 		if _, errLp := exec.LookPath("setxkbmap"); errLp != nil {
-			return fmt.Errorf("error: command '%s' not found, try -keyboard=false", "setxkbmap")
+			return fmt.Errorf("error: command '%s' not found, try it without the keyboard feature", "setxkbmap")
 		}
 	}
-	if flag.Lookup("loadavg").Value.String() == "true" {
+	if featureExists("loadavg") {
 		if _, err := os.Stat("/proc/loadavg"); errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("error: file '%s' does not exists, try -loadavg=false", "/proc/loadavg")
+			return fmt.Errorf("error: file '%s' does not exist, try it without the loadavg feature", "/proc/loadavg")
 		}
 	}
-	if flag.Lookup("camera").Value.String() == "true" {
+	if featureExists("camera") {
 		if _, err := os.Stat("/proc/modules"); errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("error: file '%s' does not exists, try -camera=false", "/proc/modules")
+			return fmt.Errorf("error: file '%s' does not exist, try it without the camera feature", "/proc/modules")
 		}
+	}
+	if featureExists("weather") && flag.Lookup("feature-weather-city").Value.String() == "" {
+		return errors.New("error: you need to use a city name for the weather feature, try it with -feature-weather-city='the city'")
 	}
 	return nil
 }
@@ -91,7 +132,7 @@ func checkFlags() error {
 // checkOut checks for a valid prerequisites
 func checkOut() error {
 	if flag.Lookup("ignoreos").Value.String() == "true" {
-		if errDf := disableFlagsOS(); errDf != nil {
+		if errDf := disableFeaturesOS(); errDf != nil {
 			return errDf
 		}
 	}
@@ -104,15 +145,40 @@ func checkOut() error {
 	return nil
 }
 
-// disableFlagsOS disables some OS dependent flags
-func disableFlagsOS() error {
-	flags := []string{"audio", "keyboard", "loadavg", "camera"}
-	for _, value := range flags {
-		if errFs := flag.Lookup(value).Value.Set("false"); errFs != nil {
-			return errFs
+// disableFeaturesOS disables some OS dependent features
+func disableFeaturesOS() error {
+	curFeatures := strings.Split(flag.Lookup("features").Value.String(), ",")
+	delFeatures := []string{"audio", "keyboard", "loadavg", "camera"}
+	newFeatures := make([]string, 0)
+	for _, feature := range curFeatures {
+		match := false
+		for _, d := range delFeatures {
+			if d == feature {
+				match = true
+				break
+			}
+		}
+		if !match {
+			newFeatures = append(newFeatures, feature)
 		}
 	}
+	if errFs := flag.Lookup("features").Value.Set(strings.Join(newFeatures, ",")); errFs != nil {
+		return errFs
+	}
 	return nil
+}
+
+// featureExists checks if the feature exists in the flags
+func featureExists(feature string) bool {
+	features := strings.Split(flag.Lookup("features").Value.String(), ",")
+	status := false
+	for _, val := range features {
+		if val == feature {
+			status = true
+			break
+		}
+	}
+	return status
 }
 
 // audioIsMuted checks if the main audio is muted
@@ -131,7 +197,7 @@ func (b *bar) audioIsMuted() bool {
 // audio gets the main volume from pulseaudio
 func (b *bar) audio() string {
 	var statusMsg string
-	if flag.Lookup("audio").Value.String() == "false" {
+	if !featureExists("audio") {
 		return ""
 	}
 	content, errEc := exec.Command("pactl", "get-sink-volume", "@DEFAULT_SINK@").Output()
@@ -157,7 +223,7 @@ func (b *bar) audio() string {
 // camera tells if an existing camera is active or not
 func (b *bar) camera() string {
 	var statusMsg = "cam: off"
-	if flag.Lookup("camera").Value.String() == "false" {
+	if !featureExists("camera") {
 		return ""
 	}
 	content, errRf := os.ReadFile("/proc/modules")
@@ -180,10 +246,10 @@ func (b *bar) camera() string {
 // date gets current date and time
 func (b *bar) date() string {
 	var timeNow string
-	if flag.Lookup("date").Value.String() == "false" {
+	if !featureExists("date") {
 		return ""
 	}
-	dateFormat := flag.Lookup("date-format").Value.String()
+	dateFormat := flag.Lookup("feature-date-format").Value.String()
 	timeNow = time.Now().Format(dateFormat)
 	return timeNow
 }
@@ -195,7 +261,7 @@ func (b *bar) gorum() string {
 		gorumTitle = fmt.Sprintf("%s/%s-%s-wm.txt", b.tmpDir, b.userName, "gorum")
 		title      string
 	)
-	if flag.Lookup("gorum").Value.String() == "false" {
+	if !featureExists("gorum") {
 		return ""
 	}
 	if _, errOsPid := os.Stat(gorumPid); errors.Is(errOsPid, os.ErrNotExist) {
@@ -226,7 +292,7 @@ func (b *bar) gorum() string {
 // keyboard gets the current keyboard layout
 func (b *bar) keyboard() string {
 	var layout, variant string
-	if flag.Lookup("keyboard").Value.String() == "false" {
+	if !featureExists("keyboard") {
 		return ""
 	}
 	content, err := exec.Command("setxkbmap", "-query").Output()
@@ -237,7 +303,7 @@ func (b *bar) keyboard() string {
 	if matchLayout := reLayout.FindSubmatch(content); len(matchLayout) >= 2 {
 		layout = string(bytes.ToUpper(bytes.TrimSpace(matchLayout[1])))
 	}
-	if flag.Lookup("keyboard-variant").Value.String() == "true" {
+	if flag.Lookup("feature-keyboard-variant").Value.String() == "true" {
 		reVariant := regexp.MustCompile(`(?m)^variant:\s+(\w+)$`)
 		if matchVariant := reVariant.FindSubmatch(content); len(matchVariant) >= 2 {
 			variant = " " + string(bytes.TrimSpace(matchVariant[1]))
@@ -249,7 +315,7 @@ func (b *bar) keyboard() string {
 // loadavg gets the average system load
 func (b *bar) loadavg() string {
 	var statusMsg string
-	if flag.Lookup("loadavg").Value.String() == "false" {
+	if !featureExists("loadavg") {
 		return ""
 	}
 	content, err := os.ReadFile("/proc/loadavg")
@@ -263,34 +329,49 @@ func (b *bar) loadavg() string {
 
 // status gets the status bar
 func (b *bar) status() string {
+	featuresStr := flag.Lookup("features").Value.String()
+	if featuresStr == "" {
+		return ""
+	}
+	featureSep := flag.Lookup("feature-separator").Value.String()
 	// display the order from left(0) to right(N)
-	channelsMap := map[string]int{
-		"gorum":    0,
-		"camera":   1,
-		"audio":    2,
-		"loadavg":  3,
-		"keyboard": 4,
-		"weather":  5,
-		"date":     6,
+	featuresFlags := strings.Split(featuresStr, ",")
+	channelsMap := map[string]int{}
+	for key, value := range featuresFlags {
+		channelsMap[value] = key
 	}
 	numChannels := len(channelsMap)
 	channels := make(map[int]chan string)
 	for i := 0; i < numChannels; i++ {
 		channels[i] = make(chan string)
 	}
-	go func() { channels[channelsMap["gorum"]] <- b.gorum() }()
-	go func() { channels[channelsMap["camera"]] <- b.camera() }()
-	go func() { channels[channelsMap["audio"]] <- b.audio() }()
-	go func() { channels[channelsMap["loadavg"]] <- b.loadavg() }()
-	go func() { channels[channelsMap["keyboard"]] <- b.keyboard() }()
-	go func() { channels[channelsMap["weather"]] <- b.weather() }()
-	go func() { channels[channelsMap["date"]] <- b.date() }()
+	if _, ok := channelsMap["date"]; ok {
+		go func() { channels[channelsMap["date"]] <- b.date() }()
+	}
+	if _, ok := channelsMap["weather"]; ok {
+		go func() { channels[channelsMap["weather"]] <- b.weather() }()
+	}
+	if _, ok := channelsMap["keyboard"]; ok {
+		go func() { channels[channelsMap["keyboard"]] <- b.keyboard() }()
+	}
+	if _, ok := channelsMap["loadavg"]; ok {
+		go func() { channels[channelsMap["loadavg"]] <- b.loadavg() }()
+	}
+	if _, ok := channelsMap["audio"]; ok {
+		go func() { channels[channelsMap["audio"]] <- b.audio() }()
+	}
+	if _, ok := channelsMap["camera"]; ok {
+		go func() { channels[channelsMap["camera"]] <- b.camera() }()
+	}
+	if _, ok := channelsMap["gorum"]; ok {
+		go func() { channels[channelsMap["gorum"]] <- b.gorum() }()
+	}
 	messages := make([]string, numChannels)
 	for i := 0; i < numChannels; i++ {
 		select {
 		case message := <-channels[i]:
 			if message != "" {
-				messages[i] = message + " | "
+				messages[i] = message + featureSep
 			}
 		case <-time.After(time.Second * 5):
 			for key, value := range channelsMap {
@@ -301,18 +382,18 @@ func (b *bar) status() string {
 			}
 		}
 	}
-	statusLine := strings.TrimRight(strings.Join(messages, ""), " | ")
+	statusLine := strings.TrimRight(strings.Join(messages, ""), featureSep)
 	return statusLine
 }
 
 // weather gets the city weather
 func (b *bar) weather() string {
 	var statusMsg string
-	city := flag.Lookup("weather").Value.String()
+	city := flag.Lookup("feature-weather-city").Value.String()
 	if city == "" {
 		return ""
 	}
-	weatherFormat := flag.Lookup("weather-format").Value.String()
+	weatherFormat := flag.Lookup("feature-weather-format").Value.String()
 	link := "https://wttr.in/" + city + "?format=" + weatherFormat
 	res, errHg := http.Get(link)
 	if errHg != nil {
@@ -350,17 +431,24 @@ func main() {
 	oneShotFlag := flag.Bool("oneshot", false, "executes the program once and terminates")
 	outputFlag := flag.Bool("output", false, "prints the output to stdout")
 	rootWindowFlag := flag.Bool("rootwindow", true, "updates the root window's name")
-	flag.Bool("audio", false, "shows the main volume percentage")
-	flag.Bool("camera", false, "shows if the camera is on/off")
-	flag.Bool("date", true, "shows the current date")
-	flag.String("date-format", "Mon Jan 2 15:04:05", "shows the current date with a custom format")
-	flag.Bool("ignoreos", false, "does not check for the OS prerequisites (also it ignores some flags)")
-	flag.Bool("gorum", false, "prints gorum's media title")
-	flag.Bool("keyboard", false, "shows the current keyboard layout")
-	flag.Bool("keyboard-variant", false, "shows the current keyboard layout variant")
-	flag.Bool("loadavg", false, "shows the system load average")
-	flag.String("weather", "", "shows the city weather")
-	flag.String("weather-format", "%t(%f)", "shows the city weather with a custom format (wttr.in)")
+	flag.String("features", "date",
+		fmt.Sprint(
+			"audio: shows the main volume percentatge\n",
+			"camera: shows if the camera is on/off\n",
+			"date: shows the current date\n",
+			"gorum: prints gorum's media title\n",
+			"keyboard: shows the current keyboard layout\n",
+			"loadavg: shows the system load average\n",
+			"weather: shows the city weather\n",
+			"* the order is shown from left to right (keyboard,date,etc.)",
+		),
+	)
+	flag.String("feature-date-format", "Mon Jan 2 15:04:05", "shows the current date with a custom format")
+	flag.Bool("feature-keyboard-variant", false, "shows the current keyboard layout and its respective variant")
+	flag.String("feature-separator", " | ", "the string separator for the features")
+	flag.String("feature-weather-city", "", "the city to show the weather")
+	flag.String("feature-weather-format", "%t(%f)", "the city weather with a custom format (wttr.in)")
+	flag.Bool("ignoreos", false, "does not check for the OS prerequisites (also it ignores some features)")
 	flag.Parse()
 	if errCo := checkOut(); errCo != nil {
 		log.Fatal(errCo)
@@ -375,7 +463,7 @@ func main() {
 		if *rootWindowFlag {
 			b.xsetroot(output)
 		}
-		if *outputFlag {
+		if *outputFlag && output != "" {
 			fmt.Println(output)
 		}
 		if *oneShotFlag {
