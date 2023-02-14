@@ -319,7 +319,10 @@ func (b *bar) weather() string {
 		errPrintf(errHg.Error())
 	}
 	content, errRa := io.ReadAll(res.Body)
-	if errBc := res.Body.Close(); errRa != nil {
+	if errRa != nil {
+		errPrintf(errRa.Error())
+	}
+	if errBc := res.Body.Close(); errBc != nil {
 		errPrintf(errBc.Error())
 	}
 	contentStr := string(content)
