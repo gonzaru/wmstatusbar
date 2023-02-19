@@ -263,32 +263,38 @@ func (b *bar) date() (string, error) {
 	return timeNow, nil
 }
 
-// gorum prints gorum's media title
-func (b *bar) gorum() (string, error) {
-	var (
-		gorumPid   = fmt.Sprintf("%s/%s-%s.pid", b.tmpDir, b.userName, "gorum")
-		gorumTitle = fmt.Sprintf("%s/%s-%s-wm.txt", b.tmpDir, b.userName, "gorum")
-		title      string
-	)
-	if !featureExists("gorum") {
-		return "", nil
-	}
-	// gorum pid does not exist
+// gorumIsRunning checks if gorum is already running
+func (b *bar) gorumIsRunning() bool {
+	gorumPid := fmt.Sprintf("%s/%s-%s.pid", b.tmpDir, b.userName, "gorum")
 	if _, errOsPid := os.Stat(gorumPid); errors.Is(errOsPid, os.ErrNotExist) {
-		return "", errors.New("gorum is not running")
+		return false
 	}
 	contentPid, errRfPid := os.ReadFile(gorumPid)
 	if errRfPid != nil {
-		return "", errRfPid
+		return false
 	}
 	pid, errSa := strconv.Atoi(strings.TrimRight(string(contentPid), "\n"))
 	if errSa != nil {
-		return "", errSa
+		return false
 	}
 	if errSk := syscall.Kill(pid, syscall.Signal(0)); errSk != nil {
-		return "", errSk
+		return false
+	}
+	return true
+}
+
+// gorum prints gorum's media title
+func (b *bar) gorum() (string, error) {
+	var gorumTitle = fmt.Sprintf("%s/%s-%s-wm.txt", b.tmpDir, b.userName, "gorum")
+	var title string
+	if !featureExists("gorum") || !b.gorumIsRunning() {
+		return "", nil
 	}
 	if _, errOsTitle := os.Stat(gorumTitle); errors.Is(errOsTitle, os.ErrNotExist) {
+		// ignore the error if gorumTitle does not exist
+		if strings.Contains(errOsTitle.Error(), "stat "+gorumTitle+": no such file or directory") {
+			return "", nil
+		}
 		return "", errOsTitle
 	}
 	contentTitle, errRfTitle := os.ReadFile(gorumTitle)
@@ -376,9 +382,6 @@ func (b *bar) status() (string, error) {
 				statusMsg, errFe = b.date()
 			case "gorum":
 				statusMsg, errFe = b.gorum()
-				if strings.Contains(errFe.Error(), "gorum is not running") {
-					errFe = nil
-				}
 			case "keyboard":
 				statusMsg, errFe = b.keyboard()
 			case "loadavg":
