@@ -211,12 +211,17 @@ func (b *bar) audio() (string, error) {
 	}
 	line := string(content)
 	if strings.Contains(line, "Volume: ") {
-		front := strings.Split(line, "/")
-		frontLeft := strings.TrimSpace(front[1])
-		frontRight := strings.TrimSpace(front[3])
-		statusMsg = "vol: left: " + frontLeft + " right: " + frontRight
-		if frontLeft != "" && frontLeft == frontRight {
-			statusMsg = "vol: " + frontLeft
+		re := regexp.MustCompile(`(?m)\d+%`)
+		if match := re.FindAllString(string(content), -1); len(match) >= 1 {
+			statusMsg = "vol: " + string(match[0])
+			if len(match) >= 2 {
+				frontLeft := match[0]
+				frontRight := match[1]
+				statusMsg = "vol: left: " + frontLeft + " / right: " + frontRight
+				if frontLeft != "" && frontLeft == frontRight {
+					statusMsg = "vol: " + frontLeft
+				}
+			}
 		}
 	}
 	isMuted, errAm := b.audioIsMuted()
