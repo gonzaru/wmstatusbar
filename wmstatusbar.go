@@ -212,11 +212,11 @@ func (b *bar) audio() (string, error) {
 	line := string(content)
 	if strings.Contains(line, "Volume: ") {
 		re := regexp.MustCompile(`(?m)\d+%`)
-		if match := re.FindAllString(string(content), -1); len(match) >= 1 {
-			statusMsg = "vol: " + string(match[0])
-			if len(match) >= 2 {
-				frontLeft := match[0]
-				frontRight := match[1]
+		if matchVol := re.FindAllString(string(content), 2); len(matchVol) >= 1 {
+			statusMsg = "vol: " + matchVol[0]
+			if len(matchVol) >= 2 {
+				frontLeft := matchVol[0]
+				frontRight := matchVol[1]
 				statusMsg = "vol: left: " + frontLeft + " / right: " + frontRight
 				if frontLeft != "" && frontLeft == frontRight {
 					statusMsg = "vol: " + frontLeft
@@ -344,8 +344,11 @@ func (b *bar) loadavg() (string, error) {
 	if errRf != nil {
 		return "", errRf
 	}
-	load := strings.Join(strings.Fields(string(content))[0:3], ", ")
-	statusMsg = "load avg: " + load
+	contentFields := strings.Fields(string(content))
+	if len(contentFields) >= 4 {
+		load := strings.Join(contentFields[0:3], ", ")
+		statusMsg = "load avg: " + load
+	}
 	return statusMsg, nil
 }
 
