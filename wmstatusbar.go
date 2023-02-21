@@ -211,10 +211,12 @@ func (b *bar) audio() (string, error) {
 	}
 	line := string(content)
 	if strings.Contains(line, "Volume: ") {
-		re := regexp.MustCompile(`(?m)\d+%`)
-		if matchVol := re.FindAllString(string(content), 2); len(matchVol) >= 1 {
+		minVolFields := 1
+		maxVolFields := 2
+		reVol := regexp.MustCompile(`(?m)\d+%`)
+		if matchVol := reVol.FindAllString(string(content), maxVolFields); len(matchVol) >= minVolFields {
 			statusMsg = "vol: " + matchVol[0]
-			if len(matchVol) >= 2 {
+			if len(matchVol) >= maxVolFields {
 				frontLeft := matchVol[0]
 				frontRight := matchVol[1]
 				statusMsg = "vol: left: " + frontLeft + " / right: " + frontRight
@@ -244,8 +246,9 @@ func (b *bar) camera() (string, error) {
 	if errRf != nil {
 		return "", errRf
 	}
-	re := regexp.MustCompile(`(?m)^uvcvideo\s[0-9]+\s([0-9]+)`)
-	if match := re.FindSubmatch(content); len(match) >= 2 {
+	minVideoFields := 2
+	reVideo := regexp.MustCompile(`(?m)^uvcvideo\s[0-9]+\s([0-9]+)`)
+	if match := reVideo.FindSubmatch(content); len(match) >= minVideoFields {
 		num, errSa := strconv.Atoi(string(match[1]))
 		if errSa != nil {
 			return "", errSa
@@ -320,13 +323,14 @@ func (b *bar) keyboard() (string, error) {
 	if errSk != nil {
 		return "", errSk
 	}
+	minLayaoutFields := 2
 	reLayout := regexp.MustCompile(`(?m)^layout:\s+([a-z][a-z])$`)
-	if matchLayout := reLayout.FindSubmatch(content); len(matchLayout) >= 2 {
+	if matchLayout := reLayout.FindSubmatch(content); len(matchLayout) >= minLayaoutFields {
 		layout = string(bytes.ToUpper(bytes.TrimSpace(matchLayout[1])))
 	}
 	if flag.Lookup("feature-keyboard-variant").Value.String() == "true" {
 		reVariant := regexp.MustCompile(`(?m)^variant:\s+(\w+)$`)
-		if matchVariant := reVariant.FindSubmatch(content); len(matchVariant) >= 2 {
+		if matchVariant := reVariant.FindSubmatch(content); len(matchVariant) >= minLayaoutFields {
 			variant = " " + string(bytes.TrimSpace(matchVariant[1]))
 		}
 	}
@@ -345,7 +349,8 @@ func (b *bar) loadavg() (string, error) {
 		return "", errRf
 	}
 	contentFields := strings.Fields(string(content))
-	if len(contentFields) >= 4 {
+	minFields := 4
+	if len(contentFields) >= minFields {
 		load := strings.Join(contentFields[0:3], ", ")
 		statusMsg = "load avg: " + load
 	}
