@@ -315,7 +315,7 @@ func (b *bar) gorum() (string, error) {
 
 // keyboard gets the current keyboard layout
 func (b *bar) keyboard() (string, error) {
-	var layout, statusMsg, variant string
+	var layout, statusMsg, variant, capsLock string
 	if !featureExists("keyboard") {
 		return "", nil
 	}
@@ -334,7 +334,13 @@ func (b *bar) keyboard() (string, error) {
 			variant = " " + string(bytes.TrimSpace(matchVariant[1]))
 		}
 	}
-	statusMsg = layout + variant
+	if flag.Lookup("feature-keyboard-capslock").Value.String() == "true" {
+		reCaps := regexp.MustCompile(`(?m)^options:\s+.*([,\s]?caps:\w+|ctrl:nocaps)`)
+		if matchCaps := reCaps.FindSubmatch(content); len(matchCaps) >= minLayaoutFields {
+			capsLock = " " + string(bytes.TrimSpace(matchCaps[1]))
+		}
+	}
+	statusMsg = layout + variant + capsLock
 	return statusMsg, nil
 }
 
@@ -348,9 +354,8 @@ func (b *bar) loadavg() (string, error) {
 	if errRf != nil {
 		return "", errRf
 	}
-	contentFields := strings.Fields(string(content))
 	minFields := 4
-	if len(contentFields) >= minFields {
+	if contentFields := strings.Fields(string(content)); len(contentFields) >= minFields {
 		load := strings.Join(contentFields[0:3], ", ")
 		statusMsg = "load avg: " + load
 	}
@@ -506,6 +511,7 @@ func main() {
 	)
 	flag.String("feature-date-format", "Mon Jan 2 15:04:05", "shows the current date with a custom format")
 	flag.Bool("feature-keyboard-variant", false, "shows the current keyboard layout and its respective variant")
+	flag.Bool("feature-keyboard-capslock", false, "shows the current keyboard Caps Lock map")
 	flag.String("feature-separator", " | ", "the string separator for the features")
 	flag.String("feature-weather-city", "", "the city to show the weather")
 	flag.String("feature-weather-format", "%t(%f)", "the city weather with a custom format (wttr.in)")
