@@ -9,7 +9,8 @@
 
 #### 2. Build
 
-    $ go build -ldflags "-s -w" -o bin/wmstatusbar wmstatusbar.go
+    $ mkdir -p bin
+    $ sh build.sh
 
 #### 3. Copy
 
@@ -24,32 +25,32 @@
 $ wmstatusbar -h
 ```
 
-* without any arguments, prints the output of the default features each second to the root window (default is only date)
+* prints the output of the default features each second to the stdout (default is the feature date)
 
 ```
 $ wmstatusbar
 ```
 
-* updates the output of the default features each 10 seconds to the root window
+* prints the load average and the date features each 5 seconds without concurrency
 
 ```
-$ wmstatusbar -interval=10
+$ wmstatusbar -interval 5 -features="loadavg,date" -parallel=false
 ```
 
-* prints only the audio and loadavg features
+* prints the load average and the date each 60 seconds with a custom date/time format
 
 ```
-$ wmstatusbar -features="audio,loadavg"
+$ wmstatusbar -interval 60 -features="loadavg,date" -feature-date-format="Mon Jan 2 15:04"
 ```
 
-* prints the date and the weather of the magical city of Narva
+* prints the weather and the date of the magical city of Narva and terminates
 
 ```
-$ wmstatusbar -features="date,weather" -feature-weather-city="Narva"
+$ wmstatusbar -oneshot -features="weather,date" -feature-weather-city="Narva" -output=stdout
 ```
 
-* prints the audio and date once and terminates (useful to combine it with another tool)
+* updates the output of the default features each 5 seconds to the root window (xsetroot)
 
 ```
-$ wmstatusbar -features="audio,date" -oneshot=true -rootwindow=false -output=true
+$ wmstatusbar -interval 5 -output=xsetroot
 ```
