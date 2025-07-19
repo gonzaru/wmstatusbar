@@ -24,6 +24,7 @@ var (
 	flagOutput    = flag.String("output", "stdout", `sends the output to "stdout", "stderr" or "xsetroot"`)
 	flagOneShot   = flag.Bool("oneshot", false, "prints the status line once and terminates")
 	flagParallel  = flag.Bool("parallel", true, "runs features concurrently")
+	flagIgnoreOS  = flag.Bool("ignoreos", false, "does not check for the OS prerequisites")
 
 	// go build -ldflags "-X main.version=$(git rev-parse --short HEAD)"
 	version     = "dev"
@@ -99,6 +100,10 @@ func main() {
 	if *flagVersion {
 		fmt.Printf("wmstatusbar version %s\n", version)
 		return
+	}
+
+	if err := checkPre(); err != nil {
+		log.Fatal(err)
 	}
 
 	featsActive := features.ParseList(*featList)

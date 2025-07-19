@@ -76,8 +76,8 @@ func (weather) Info(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := res.Body.Close(); err != nil {
-		return "", err
+	if errRb := res.Body.Close(); errRb != nil {
+		return "", errRb
 	}
 	return strings.TrimSpace(string(body)), nil
 }

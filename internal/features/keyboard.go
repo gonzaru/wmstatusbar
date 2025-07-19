@@ -14,7 +14,7 @@ import (
 type keyboard struct{}
 
 var (
-	showVariant = flag.Bool(
+	keyboardVariant = flag.Bool(
 		"feature-keyboard-variant",
 		false,
 		"shows the current keyboard layout variant",
@@ -53,7 +53,7 @@ func (keyboard) Info(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	msg := string(bytes.TrimSpace(mLayout[1]))
-	if *showVariant {
+	if *keyboardVariant {
 		if mVariant := reVariant.FindSubmatch(out); len(mVariant) >= 2 {
 			msg += " " + string(bytes.TrimSpace(mVariant[1]))
 		}
